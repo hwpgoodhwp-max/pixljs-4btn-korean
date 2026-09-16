@@ -1,0 +1,62 @@
+name: Build Pixl.js 4BTN Korean
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "Pixl.js_4BTN_OLED_Korean_Source.zip"
+      - ".github/workflows/build-4btn-korean.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: solosky/nrf52-sdk:latest
+
+    steps:
+      - name: Check out build repository
+        uses: actions/checkout@v4
+
+      - name: Fetch 4-button source and submodules
+        run: |
+          git clone --depth 1 --recurse-submodules \
+            --branch feature/back-button-4btn-oled \
+            https://github.com/GeGerardo/pixl.js.git firmware
+
+      - name: Apply Korean merged source
+        run: |
+          unzip -q Pixl.js_4BTN_OLED_Korean_Source.zip -d merged
+          cp -a merged/pixl.js-feature-back-button-4btn-oled/. firmware/
+
+      - name: Verify Korean 4-button configuration
+        run: |
+          test -f firmware/fw/application/src/boards/board_oled_4btn.h
+          test -f firmware/fw/application/src/i18n/ko_KR.c
+          grep -q 'LANGUAGE_KO_KR' firmware/fw/application/src/i18n/language.c
+          grep -q 'BOARD_OLED_4BTN' firmware/fw/application/src/custom_board.h
+
+      - name: Build OLED_4BTN firmware
+        run: |
+          chown -R root:root firmware
+          cd firmware/fw
+          make all BOARD=OLED_4BTN RELEASE=1 APP_VERSION=${GITHUB_RUN_NUMBER}
+
+      - name: Collect firmware files
+        run: |
+          mkdir -p output
+          cp firmware/fw/_build/pixjs_ota_v*.zip output/
+          cp firmware/fw/_build/pixljs.hex output/
+          cp firmware/fw/_build/pixljs_all.hex output/
+          cp firmware/fw/_build/bootloader.hex output/
+          sha256sum output/* > output/SHA256SUMS.txt
+
+      - name: Upload OLED_4BTN Korean firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pixl.js-4BTN-OLED-Korean
+          path: output/
+          if-no-files-found: error
+          retention-days: 30
