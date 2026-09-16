@@ -1,0 +1,46 @@
+name: Build standard OLED Korean
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "Pixl.js_4BTN_OLED_Korean_Source.zip"
+      - ".github/workflows/build-oled-korean.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: solosky/nrf52-sdk:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch source dependencies
+        run: |
+          git clone --depth 1 --recurse-submodules --branch feature/back-button-4btn-oled https://github.com/GeGerardo/pixl.js.git firmware
+      - name: Apply updated Korean database and font
+        run: |
+          unzip -q Pixl.js_4BTN_OLED_Korean_Source.zip -d merged
+          cp -a merged/pixl.js-feature-back-button-4btn-oled/. firmware/
+          grep -q 'BUTTONS_NUMBER 3' firmware/fw/application/src/boards/board_oled.h
+          grep -q 'note_ko' firmware/fw/application/src/amiidb/db_header.h
+      - name: Build standard OLED firmware
+        run: |
+          chown -R root:root firmware
+          cd firmware/fw
+          VERSION=$((216001 + GITHUB_RUN_NUMBER))
+          make all BOARD=OLED RELEASE=1 APP_VERSION=$VERSION
+      - name: Collect standard OLED OTA
+        run: |
+          mkdir -p output
+          cp firmware/fw/_build/pixjs_ota_v*.zip output/
+          cp firmware/fw/data/db_update_report.json output/
+          sha256sum output/* > output/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pixl.js-Standard-OLED-Korean
+          path: output/
+          if-no-files-found: error
+          retention-days: 30
